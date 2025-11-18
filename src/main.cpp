@@ -2,7 +2,7 @@
 #include <string>
 #include "Transform.h"
 #include "Utils.h"
-#include "Rasterizer.h"
+#include "Rasteriser.h"
 #include "FileLoader.h"
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -32,6 +32,10 @@ vector<ModelTriangle> transformedLogo;
 vector<ModelTriangle> projectedLogo;
 mat4 modelMat = mat4(1.0f); // Model Matrix
 
+// Define Rasteriser
+Rasteriser rasteriser = Rasteriser(WIDTH, HEIGHT);
+
+
 void handleEvent(SDL_Event event, DrawingWindow& window) {
 	if (event.type == SDL_KEYDOWN) {
 		// Rotate Camera
@@ -39,51 +43,50 @@ void handleEvent(SDL_Event event, DrawingWindow& window) {
 			Transform::left(5, camera, cameraUp);
 			glm::mat4 viewMat = glm::lookAt(camera, center, cameraUp);
 			projectedLogo = Transform::projectTriangles(transformedLogo, viewMat, projMat);
-			DrawAllTriangles(window, projectedLogo);
+			rasteriser.DrawAllTriangles(window, projectedLogo);
 		}
 		else if (event.key.keysym.sym == SDLK_d) {
 			Transform::left(-5, camera, cameraUp);
 			glm::mat4 viewMat = glm::lookAt(camera, center, cameraUp);
 			projectedLogo = Transform::projectTriangles(transformedLogo, viewMat, projMat);
-			DrawAllTriangles(window, projectedLogo);
+			rasteriser.DrawAllTriangles(window, projectedLogo);
 		}
 		else if (event.key.keysym.sym == SDLK_w) {
 			Transform::up(-5, camera, cameraUp);
 			glm::mat4 viewMat = glm::lookAt(camera, center, cameraUp);
 			projectedLogo = Transform::projectTriangles(transformedLogo, viewMat, projMat);
-			DrawAllTriangles(window, projectedLogo);
+			rasteriser.DrawAllTriangles(window, projectedLogo);
 		}
 		else if (event.key.keysym.sym == SDLK_s) {
 			Transform::up(5, camera, cameraUp);
 			glm::mat4 viewMat = glm::lookAt(camera, center, cameraUp);
 			projectedLogo = Transform::projectTriangles(transformedLogo, viewMat, projMat);
-		
-			DrawAllTriangles(window, projectedLogo);
+			rasteriser.DrawAllTriangles(window, projectedLogo);
 		}
 		// Translate Camera
 		else if (event.key.keysym.sym == SDLK_UP) {
 			Transform::moveUp(-10.0f, camera, center, cameraUp);
 			glm::mat4 viewMat = glm::lookAt(camera, center, cameraUp);
 			projectedLogo = Transform::projectTriangles(transformedLogo, viewMat, projMat);
-			DrawAllTriangles(window, projectedLogo);
+			rasteriser.DrawAllTriangles(window, projectedLogo);
 		}
 		else if (event.key.keysym.sym == SDLK_DOWN) {
 			Transform::moveUp(10.0f, camera, center, cameraUp);
 			glm::mat4 viewMat = glm::lookAt(camera, center, cameraUp);
 			projectedLogo = Transform::projectTriangles(transformedLogo, viewMat, projMat);
-			DrawAllTriangles(window, projectedLogo);
+			rasteriser.DrawAllTriangles(window, projectedLogo);
 		}
 		else if (event.key.keysym.sym == SDLK_LEFT) {
 			Transform::moveRight(10.0f, camera, center, cameraUp);
 			glm::mat4 viewMat = glm::lookAt(camera, center, cameraUp);
 			projectedLogo = Transform::projectTriangles(transformedLogo, viewMat, projMat);
-			DrawAllTriangles(window, projectedLogo);
+			rasteriser.DrawAllTriangles(window, projectedLogo);
 		}
 		else if (event.key.keysym.sym == SDLK_RIGHT) {
 			Transform::moveRight(-10.0f, camera, center, cameraUp);
 			glm::mat4 viewMat = glm::lookAt(camera, center, cameraUp);
 			projectedLogo = Transform::projectTriangles(transformedLogo, viewMat, projMat);
-			DrawAllTriangles(window, projectedLogo);
+			rasteriser.DrawAllTriangles(window, projectedLogo);
 		}
 	}
 	// Dolly Camera
@@ -96,25 +99,33 @@ void handleEvent(SDL_Event event, DrawingWindow& window) {
 		}
 		glm::mat4 viewMat = glm::lookAt(camera, center, cameraUp);
 		projectedLogo = Transform::projectTriangles(transformedLogo, viewMat, projMat);
-		DrawAllTriangles(window, projectedLogo);
+		rasteriser.DrawAllTriangles(window, projectedLogo);
 	}
 }
 
-int main(int argc, char* argv[]) {
+
+void init() {
 	modelMat = glm::translate(modelMat, vec3(-250.0f, -250.0f, 0.0f));
 	const Buffers logoBuffers = readOBJFile("./models/logo.obj", 1.0f);
+	// load texture
+	rasteriser.loadTexture(logoBuffers.name, logoBuffers.textureMap);
 	logo = convertToTriangles(logoBuffers); // world coords
 	cout << logo.size() << " triangles loaded." << endl;
 	transformedLogo = Transform::transformTriangles(logo, modelMat);
 	projectedLogo = Transform::projectTriangles(transformedLogo, viewMat, projMat);  // screen coords
 
-	for (auto t : projectedLogo) {
-		drawWireframeTriangle(window, t, Colour(255, 255, 255));
-	}
-	window.renderFrame();
+	rasteriser.DrawAllTriangles(window, projectedLogo);
+	cout << "Initialisation complete." << endl;
+}
+
+
+int main(int argc, char* argv[]) {
+	init();
+
 	while (true) {
 		if (window.pollForInputEvents(event)) handleEvent(event, window);
 		window.renderFrame();
+		rasteriser.resetZBuffer();
 	}
 	return 0;
 }

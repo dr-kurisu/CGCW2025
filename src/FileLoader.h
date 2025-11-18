@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include "TextureMap.h"
 #include "ModelTriangle.h"
+#include "Material.h"
 
 
 struct Buffers {

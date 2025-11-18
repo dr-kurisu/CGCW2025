@@ -25,8 +25,8 @@ add_executable(CW
         src/main.cpp
         src/FileLoader.cpp
         src/FileLoader.h
-        "src/Rasterizer.cpp"
-        "src/Rasterizer.h"
+        "src/Rasteriser.cpp"
+        "src/Rasteriser.h"
         libs/sdw/Material.h
         libs/sdw/Transform.cpp
         libs/sdw/Transform.h

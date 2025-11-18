@@ -27,23 +27,37 @@ std::vector<ModelTriangle> Transform::transformTriangles(std::vector<ModelTriang
     return transformedTriangles;
 }
 
-std::vector<ModelTriangle> Transform::projectTriangles(std::vector<ModelTriangle> triangles, mat4& viewMat, mat4& projMat) {
+std::vector<ModelTriangle> Transform::projectTriangles(std::vector<ModelTriangle> &triangles, mat4& viewMat, mat4& projMat) {
     std::vector<ModelTriangle> projectedTriangles;
+    // UV unchange
     for (ModelTriangle t : triangles) {
         bool flag = false;
         // Deep Copy not pointer copy
         for (int i = 0; i < 3; i++) {
             glm::vec3 worldCoord = t.vertices[i];
             // Tranformation to clip space
-            vec4 clipSpacePos = projMat * viewMat * vec4(worldCoord, 1.0f);
-			if (clipSpacePos.w <= 0) flag = true; // behind the camera
+            vec4 viewPos = viewMat * vec4(worldCoord, 1.0f);
+            vec4 clipSpacePos = projMat * viewPos;
+            // behind the camera (remove entire triangle)
+            if (clipSpacePos.w <= 0) {
+                flag = true; 
+                break;
+            }
+			// perspective divide for texture coordinates
+			double inverseW = 1.0f / clipSpacePos.w;
             // NDC
-            vec3 ndc = glm::vec3(clipSpacePos) / clipSpacePos.w;
-            if (ndc.z < -1 || ndc.z > 1) flag = true;
+            vec3 ndc = glm::vec3(clipSpacePos) * (float)inverseW;
+            // store 1/w for perspective correction
+			t.inverseW[i] = inverseW;
+            // outside depth range (remove entire triangle)
+			if (ndc.z < -1 || ndc.z > 1) {
+                flag = true; 
+                break;
+            }
             // Screen space
 			float sx = (ndc.x + 1) * 0.5f * WIDTH; // (-1 to 1) to (0 to WIDTH)
 			float sy = (1 - ndc.y) * 0.5f * HEIGHT;// (-1 to 1) to (0 to HEIGHT)
-            t.vertices[i] = glm::vec3(sx, sy, ndc.z);
+            t.vertices[i] = glm::vec3(sx, sy, viewPos.z);
         }
         if (!flag) projectedTriangles.push_back(t);
     }

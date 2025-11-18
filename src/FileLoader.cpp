@@ -95,16 +95,14 @@ std::vector<ModelTriangle> convertToTriangles(const Buffers& buffers) {
 		int vt1 = uvIndices[i * 3 + 1];
 		int vt2 = uvIndices[i * 3 + 2];
 
-		TexturePoint t0 = TexturePoint(textureCoords[vt0].x, textureCoords[vt0].y);
-		TexturePoint t1 = TexturePoint(textureCoords[vt1].x, textureCoords[vt1].y);
-		TexturePoint t2 = TexturePoint(textureCoords[vt2].x, textureCoords[vt2].y);
+		//TexturePoint t0 = TexturePoint(textureCoords[vt0].x, textureCoords[vt0].y);
+		//TexturePoint t1 = TexturePoint(textureCoords[vt1].x, textureCoords[vt1].y);
+		//TexturePoint t2 = TexturePoint(textureCoords[vt2].x, textureCoords[vt2].y);
+		triangle.u = glm::vec3(textureCoords[vt0].x, textureCoords[vt1].x, textureCoords[vt2].x);
+		triangle.v = glm::vec3(textureCoords[vt0].y, textureCoords[vt1].y, textureCoords[vt2].y);
 		// Calculate normal by cross product
 		triangle.vertices = { vertices[v0], vertices[v1], vertices[v2]};
-		triangle.texturePoints = { t0, t1, t2 };
-
-		// Maybe need to reverse (depend on the order of vertex)
-		triangle.normal = glm::normalize(glm::cross(vertices[v1] - vertices[v0], vertices[v2] - vertices[v0]));
-
+		triangle.material = Material(buffers.name);
 		result.push_back(triangle);
 	}
 	return result;

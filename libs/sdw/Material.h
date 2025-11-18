@@ -1,12 +1,18 @@
-#pragma once
+#ifndef MATERIAL_H
+#define MATERIAL_H
 
 #include "TextureMap.h"
+#include "Colour.h"
+#include <string>
 
-//struct Material {
-//    std::string name;
-//    Colour Kd;            // diffuse
-//    const TextureMap* map_Kd;   // diffuse texture
-//    bool isReflective;
-//
-//    // Material(const TextureMap& map) : name(""), Kd(), map_Kd(&map), isReflective(false) {}
-//};
+struct Material {
+    std::string name;
+    Colour Kd;            // diffuse
+    std::string mapName;   // diffuse texture
+    bool isReflective;
+
+    Material(std::string name) : name(""), Kd(), mapName(name), isReflective(false) {}
+	Material() : name(""), Kd(), mapName(""), isReflective(false) {}
+};
+
+#endif

@@ -28,7 +28,7 @@ public:
 	static void moveUp(float distance, vec3& camera, vec3& center, vec3& up);
 	static ModelTriangle transformTriangle(ModelTriangle& triangle, mat4& mat);
 	static std::vector<ModelTriangle> Transform::transformTriangles(std::vector<ModelTriangle> triangles, glm::mat4& mat);
-	static std::vector<ModelTriangle> projectTriangles(std::vector<ModelTriangle> triangles, glm::mat4& viewMat, glm::mat4& projMat);
+	static std::vector<ModelTriangle> projectTriangles(std::vector<ModelTriangle>& triangles, glm::mat4& viewMat, glm::mat4& projMat);
 };
 
 #endif

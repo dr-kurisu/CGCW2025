@@ -16,13 +16,20 @@
 struct Buffers {
 	std::string name;
 	std::vector<glm::vec3> vertices;
-	TextureMap textureMap;
+	std::unordered_map<std::string, TextureMap> textureMaps;
+	std::unordered_map<std::string, Material> materials;
+	std::vector<std::string> faceMaterialNames;
 	std::vector<glm::vec2> textureCoords;
 	std::vector<int> indices;
 	std::vector<int> textureIndices;
+	
+	glm::mat4 viewMat = glm::mat4(1.0f);
+	glm::mat4 projMat = glm::mat4(1.0f);
 };
 
 Buffers readOBJFile(const std::string &filePath, float factor);
 
 std::vector<ModelTriangle> convertToTriangles(const Buffers& buffers);
+
+void printBuffers(const Buffers &buffers);
 #endif

@@ -1,10 +1,11 @@
 #include "ModelTriangle.h"
 #include "DrawingWindow.h"
+#include "FileLoader.h"
 #include <algorithm>
 #include <unordered_map>
+#include "Renderer.h"
 
-
-class Rasteriser {
+class Rasteriser : public Renderer{
 public:
 	// Pass width and height for coordinate transformation
 	Rasteriser(int w, int h);
@@ -12,22 +13,19 @@ public:
 
 	void drawWireframeTriangle(DrawingWindow& window, ModelTriangle triangle, Colour colour);
 
-	void drawFilledTriangle(DrawingWindow& window, ModelTriangle triangle, Colour colour);
+	void drawFilledTriangle(DrawingWindow& window, ModelTriangle triangle);
 
-	void DrawTextureTriangle(DrawingWindow& window, ModelTriangle t);
+	void drawTextureTriangle(DrawingWindow& window, ModelTriangle t, Buffers &buffers);
 
-	void DrawAllTriangles(DrawingWindow& window, const std::vector<ModelTriangle>& triangles);
+	void drawAllTriangles(DrawingWindow& window, Buffers &buffers, const std::vector<ModelTriangle>& triangles) override;
 
-	void loadTexture(const std::string& name, const TextureMap& texture);
+	void updateMatrices(glm::mat4& viewMat, glm::mat4& projMat) override {};
 
-	void resetZBuffer();
+	void resetZBuffer() override;
 
 private:
 	std::vector<float> zbuffer;
-	std::unordered_map<std::string, TextureMap> textureMaps;
 	int width;
 	int height;
-
-	TextureMap textureMap;
 	std::string currentTextureName = "";
 };

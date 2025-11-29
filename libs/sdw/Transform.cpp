@@ -39,7 +39,7 @@ std::vector<ModelTriangle> Transform::projectTriangles(std::vector<ModelTriangle
             vec4 viewPos = viewMat * vec4(worldCoord, 1.0f);
             vec4 clipSpacePos = projMat * viewPos;
             // behind the camera (remove entire triangle)
-            if (clipSpacePos.w <= 0) {
+            if (clipSpacePos.w <= 1e-6) {
                 flag = true; 
                 break;
             }
@@ -49,15 +49,15 @@ std::vector<ModelTriangle> Transform::projectTriangles(std::vector<ModelTriangle
             vec3 ndc = glm::vec3(clipSpacePos) * (float)inverseW;
             // store 1/w for perspective correction
 			t.inverseW[i] = inverseW;
-            // outside depth range (remove entire triangle)
-			if (ndc.z < -1 || ndc.z > 1) {
-                flag = true; 
+            // May outside depth range
+            if (ndc.z < -1.0f || ndc.z > 1.0f) {
+                flag = true;
                 break;
-            }
+			}
             // Screen space
 			float sx = (ndc.x + 1) * 0.5f * WIDTH; // (-1 to 1) to (0 to WIDTH)
 			float sy = (1 - ndc.y) * 0.5f * HEIGHT;// (-1 to 1) to (0 to HEIGHT)
-            t.vertices[i] = glm::vec3(sx, sy, viewPos.z);
+            t.vertices[i] = glm::vec3(sx, sy, ndc.z);
         }
         if (!flag) projectedTriangles.push_back(t);
     }

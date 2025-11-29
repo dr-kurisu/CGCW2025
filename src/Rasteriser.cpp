@@ -15,8 +15,6 @@
 
 #define WHITE Colour(255, 255, 255)
 
-// Todo: Add Z-buffer
-
 struct Line {
     std::vector<glm::vec2> points;
 };
@@ -25,12 +23,16 @@ inline float edgeFunction(const glm::vec3& a, const glm::vec3& b, const glm::vec
     return (c.x - a.x) * (b.y - a.y) - (c.y - a.y) * (b.x - a.x);
 }
 
+inline float edgeFunction(const glm::vec3& a, const glm::vec3& b, const glm::vec2& c) {
+    return (c.x - a.x) * (b.y - a.y) - (c.y - a.y) * (b.x - a.x);
+}
+
 auto wrap = [](float x) {
     return x - std::floor(x);
-    };
+};
 
 void Rasteriser::resetZBuffer() {
-    std::fill(zbuffer.begin(), zbuffer.end(), -std::numeric_limits<float>::infinity());
+    std::fill(zbuffer.begin(), zbuffer.end(), std::numeric_limits<float>::infinity());
 }
 
 Line InterpolateLine(glm::vec3 p1, glm::vec3 p2) {
@@ -70,24 +72,25 @@ void drawLineWithColour(DrawingWindow& window, Line line, Colour c) {
     }
 }
 
-void Rasteriser::drawFilledTriangle(DrawingWindow& window, ModelTriangle triangle, Colour colour) {
+void Rasteriser::drawFilledTriangle(DrawingWindow& window, ModelTriangle triangle) {
+    Colour colour = triangle.material.Kd;
     // Find bounding box
     auto vertices = triangle.vertices;
     int minX = std::floor(std::min({ vertices[0].x, vertices[1].x, vertices[2].x }));
     int maxX = std::ceil(std::max({ vertices[0].x, vertices[1].x, vertices[2].x }));
     int minY = std::floor(std::min({ vertices[0].y, vertices[1].y, vertices[2].y }));
     int maxY = std::ceil(std::max({ vertices[0].y, vertices[1].y, vertices[2].y }));
-    float area = edgeFunction(vertices[0], vertices[1], vertices[2]);
+    double area = edgeFunction(vertices[0], vertices[1], vertices[2]);
     // Invalid triangle
-    if (area == 0) return;
+    if (abs(area) < 1e-6) return; 
     for (int y = minY; y < maxY; y++) {
         if (y < 0 || y > window.height - 1) continue;
         for (int x = minX; x < maxX; x++) {
             if (x < 0 || x > window.width - 1) continue; // out of boundary
             glm::vec2 p = glm::vec2(x + 0.5f, y + 0.5f); // sample center of pixel
-            float w0 = edgeFunction(vertices[1], vertices[2], glm::vec3(p, 0.0f));
-            float w1 = edgeFunction(vertices[2], vertices[0], glm::vec3(p, 0.0f));
-            float w2 = edgeFunction(vertices[0], vertices[1], glm::vec3(p, 0.0f));
+            float w0 = edgeFunction(vertices[1], vertices[2], p);
+            float w1 = edgeFunction(vertices[2], vertices[0], p);
+            float w2 = edgeFunction(vertices[0], vertices[1], p);
             // check order of vertices
             if (area < 0) {
                 w0 = -w0;
@@ -96,8 +99,27 @@ void Rasteriser::drawFilledTriangle(DrawingWindow& window, ModelTriangle triangl
             }
             // interpolate colour
             if (w0 >= 0 && w1 >= 0 && w2 >= 0) {
-                uint32_t colourInt = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
-                window.setPixelColour(x, y, colourInt);
+                float alpha = w0 / area;
+                float beta = w1 / area;
+                float gamma = w2 / area;
+
+                float inverseW = alpha * triangle.inverseW[0] +
+                             beta * triangle.inverseW[1] +
+                             gamma * triangle.inverseW[2];
+
+                float z = alpha * vertices[0].z +
+                          beta * vertices[1].z +
+                          gamma * vertices[2].z;
+
+                float zNdc = z / inverseW;
+
+                int zBufferIndex = y * window.width + x;
+
+                if (zNdc < zbuffer[zBufferIndex]) {
+                    zbuffer[zBufferIndex] = zNdc;
+                    uint32_t colourInt = (255 << 24) + (colour.red << 16) + (colour.green << 8) + colour.blue;
+                    window.setPixelColour(x, y, colourInt);
+                }
             }            
         }
     }
@@ -116,7 +138,10 @@ void Rasteriser::drawWireframeTriangle(DrawingWindow& window, ModelTriangle tria
     drawLineWithColour(window, line3, colour);
 }
 
-void Rasteriser::DrawTextureTriangle(DrawingWindow& window, ModelTriangle t) {
+void Rasteriser::drawTextureTriangle(DrawingWindow& window, ModelTriangle t, Buffers &buffers) {
+	// Only draw if triangle has texture
+    if (t.material.type != "kd_map") return;
+    assert(t.hasTexture());
     // Find bounding box
     auto vertices = t.vertices;
     int minX = std::floor(std::min({ vertices[0].x, vertices[1].x, vertices[2].x }));
@@ -128,16 +153,17 @@ void Rasteriser::DrawTextureTriangle(DrawingWindow& window, ModelTriangle t) {
     // Invalid triangle
     if (area == 0) return;
 
-    assert(t.hasTexture());
-
     // Find textureMap
     const std::string mapName = t.material.mapName;
-    auto iterator = textureMaps.find(mapName);
-    if (iterator != textureMaps.end()) {
+    auto iterator = buffers.textureMaps.find(mapName);
+	TextureMap& textureMap = buffers.textureMaps.begin()->second; // default to first texture
+    if (iterator != buffers.textureMaps.end()) {
+        // No value copy
         textureMap = iterator->second;
     }
     else {
         std::cerr << "Texture not found: " << mapName << std::endl;
+        return;
     }
 
     for (int y = minY; y < maxY; y++) {
@@ -164,12 +190,18 @@ void Rasteriser::DrawTextureTriangle(DrawingWindow& window, ModelTriangle t) {
                           beta * t.vertices[1].z +
                           gamma * t.vertices[2].z;
 
+                float inverseW = alpha * t.inverseW[0] +
+                                 beta * t.inverseW[1] +
+                                 gamma * t.inverseW[2];
+
                 int zBufferIndex = y * window.width + x;
 
-                if (z <= zbuffer[zBufferIndex]) {
+				float zNdc = z / inverseW;
+
+                if (zNdc >= zbuffer[zBufferIndex]) {
                     continue;
                 }
-                zbuffer[zBufferIndex] = z;
+				zbuffer[zBufferIndex] = zNdc;
 
 				// should be between 0 and 1
                 glm::vec3 k = glm::vec3(alpha, beta, gamma);
@@ -177,16 +209,9 @@ void Rasteriser::DrawTextureTriangle(DrawingWindow& window, ModelTriangle t) {
 
                 float u = glm::dot(k, t.u * t.inverseW);
                 float v = glm::dot(k, t.v * t.inverseW);
-				// perspective correct something wrong
+				// perspective correct
 				u /= one_over_w;
 				v /= one_over_w;
-
-                //float u = alpha * t.texturePoints[0].x + 
-                //          beta * t.texturePoints[1].x +
-                //          gamma * t.texturePoints[2].x;
-                //float v = alpha * t.texturePoints[0].y +
-                //          beta * t.texturePoints[1].y +
-                //          gamma * t.texturePoints[2].y;
 
 				// Wrap texture coordinates
                 float uWrap = u - std::floor(u);
@@ -201,25 +226,18 @@ void Rasteriser::DrawTextureTriangle(DrawingWindow& window, ModelTriangle t) {
     }
 }
 
-// May need to rename
-void Rasteriser::DrawAllTriangles(DrawingWindow& window, const std::vector<ModelTriangle>& triangles) {
-    window.clearPixels();
+void Rasteriser::drawAllTriangles(DrawingWindow& window, Buffers &buffers, const std::vector<ModelTriangle>& triangles) {
     for (auto t : triangles) {
-        // drawWireframeTriangle(window, t, WHITE);
-        DrawTextureTriangle(window, t);
+        if (t.material.type == "kd") { drawFilledTriangle(window, t); }
+		else if (t.material.type == "kd_map") { drawTextureTriangle(window, t, buffers); }
     }
-}
-
-void Rasteriser::loadTexture(const std::string& name, const TextureMap& texture) {
-    textureMaps[name] = texture;
 }
 
 // constructor
 Rasteriser::Rasteriser(int w, int h)
     : width(w),
     height(h),
-    zbuffer(w* h, -std::numeric_limits<float>::infinity()),
-    textureMaps()
+    zbuffer(w* h, std::numeric_limits<float>::infinity())
 {}
 
 Rasteriser::~Rasteriser() {

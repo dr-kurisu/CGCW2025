@@ -25,12 +25,16 @@ add_executable(CW
         src/main.cpp
         src/FileLoader.cpp
         src/FileLoader.h
-        "src/Rasteriser.cpp"
-        "src/Rasteriser.h"
+        src/Rasteriser.cpp
+        src/Rasteriser.h
         libs/sdw/Material.h
         libs/sdw/Transform.cpp
         libs/sdw/Transform.h
-)
+        src/Ray.h 
+        src/RayTracer.h
+        src/RayTracer.cpp
+        src/Renderer.h
+ "libs/sdw/Light.h" "libs/sdw/Light.cpp" "libs/sdw/PointLight.h" "libs/sdw/DirectionalLight.h")
 
 if (MSVC)
     target_compile_options(CW

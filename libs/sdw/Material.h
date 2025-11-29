@@ -9,10 +9,11 @@ struct Material {
     std::string name;
     Colour Kd;            // diffuse
     std::string mapName;   // diffuse texture
+	std::string type;      // material type
     bool isReflective;
 
-    Material(std::string name) : name(""), Kd(), mapName(name), isReflective(false) {}
-	Material() : name(""), Kd(), mapName(""), isReflective(false) {}
+    Material(std::string name) : name(name), Kd(255, 255, 255), mapName(""), isReflective(false), type("kd_map") {}
+	Material() : name(""), Kd(255, 255, 255), mapName(""), isReflective(false), type("kd") {}
 };
 
 #endif

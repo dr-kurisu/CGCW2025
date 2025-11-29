@@ -1,3 +1,2 @@
-newmtl logoMaterial
-Kd 1.0 1.0 1.0
+newmtl default
 map_Kd texture.ppm

@@ -153,6 +153,8 @@ std::vector<ModelTriangle> convertToTriangles(const Buffers& buffers) {
 		int v0 = indices[i * 3 + 0];
 		int v1 = indices[i * 3 + 1];
 		int v2 = indices[i * 3 + 2];
+
+		triangle.vertexIndices = { v0, v1, v2 };
 		std::string materialName = buffers.faceMaterialNames[i]; // assume each triangle has same material
 		if (buffers.materials.find(materialName) != buffers.materials.end()) {
 			triangle.material = buffers.materials.at(materialName);
@@ -174,6 +176,34 @@ std::vector<ModelTriangle> convertToTriangles(const Buffers& buffers) {
 		result.push_back(triangle);
 	}
 	return result;
+}
+
+void computeNormals(Buffers& buffers, std::vector<ModelTriangle>& triangles) {
+	// need init
+	buffers.vertexNormals.assign(buffers.vertices.size(), glm::vec3(0.0f));
+	for (auto& t : triangles) {
+		glm::vec3 v0 = t.vertices[0];
+		glm::vec3 v1 = t.vertices[1];
+		glm::vec3 v2 = t.vertices[2];
+		
+		glm::vec3 faceNormal = glm::normalize(glm::cross(v1 - v0, v2 - v0));
+		float area = 0.5f * glm::length(glm::cross(v1 - v0, v2 - v0));
+		buffers.vertexNormals[t.vertexIndices[0]] += faceNormal * area;
+		buffers.vertexNormals[t.vertexIndices[1]] += faceNormal * area;
+		buffers.vertexNormals[t.vertexIndices[2]] += faceNormal * area;
+		t.normal = faceNormal;
+	}
+	// Normalise
+	for (auto& n : buffers.vertexNormals) {
+		n = glm::normalize(n);
+	}
+	// Assign
+	for (auto& triangle : triangles) {
+		for (int i = 0; i < 3; i++) {
+			int index = triangle.vertexIndices[i];
+			triangle.vertexNormals[i] = buffers.vertexNormals[index];
+		}
+	}
 }
 
 void printBuffers(const Buffers &buffers) {

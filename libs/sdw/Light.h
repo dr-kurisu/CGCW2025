@@ -22,11 +22,6 @@ public:
     virtual glm::vec3 directionFrom(const glm::vec3& point) const = 0;
 
     virtual float distanceFrom(const glm::vec3& point) const = 0;
-
-    virtual float attenuation(const glm::vec3& point) const {
-        float d = distanceFrom(point);
-        return 1.0f / (d * d);
-    }
 };
 
 #endif

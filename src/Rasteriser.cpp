@@ -72,8 +72,230 @@ void drawLineWithColour(DrawingWindow& window, Line line, Colour c) {
     }
 }
 
-void Rasteriser::drawFilledTriangle(DrawingWindow& window, ModelTriangle triangle) {
-    Colour colour = triangle.material.Kd;
+Colour Rasteriser::computePhongLighting(
+    const glm::vec3& pos,
+    const glm::vec3& normal,
+    const Colour& colour
+) {
+    glm::vec3 base = glm::vec3(colour.red, colour.green, colour.blue) / 255.0f;
+    glm::vec3 ambient = glm::vec3(0.1f) * base;
+    glm::vec3 total = ambient;
+
+    for (const auto& light : lights) {
+        glm::vec3 lightDir = glm::normalize(light.position - pos);
+        glm::vec3 viewDir = glm::normalize(camera - pos);
+        glm::vec3 halfDir = glm::normalize(lightDir + viewDir);
+
+        // Diffuse
+        float diff = std::max(0.0f, glm::dot(normal, lightDir));
+
+        // Specular
+        float shininess = 64.0f;
+        float specStrength = 0.3f;
+        float spec = pow(std::max(0.0f, glm::dot(normal, halfDir)), shininess);
+
+        float d = glm::length(light.position - pos);
+        float attenuation = 250.0f / (4 * M_PI * d * d);
+
+        glm::vec3 lightCol = light.colour * light.intensity * attenuation;
+        glm::vec3 diffuse = diff * lightCol * base;
+        glm::vec3 specular = specStrength * spec * lightCol;
+
+        total += diffuse + specular;
+    }
+
+    total = glm::clamp(total, 0.0f, 1.0f);
+    return Colour(int(total.r * 255), int(total.g * 255), int(total.b * 255));
+}
+
+Colour Rasteriser::computeFlatShading(
+    const ModelTriangle& triangle,
+    const glm::vec3& camera,
+    const std::vector<PointLight>& lights
+) {
+    // All in world position
+    glm::vec3 v0 = triangle.vertices[0];
+    glm::vec3 v1 = triangle.vertices[1];
+    glm::vec3 v2 = triangle.vertices[2];
+    // sample centre point
+    glm::vec3 centroid = (v0 + v1 + v2) / 3.0f;
+	glm::vec3 normal = triangle.normal;
+
+    Colour base;
+    if (triangle.material.type == "kd") {
+        base = triangle.material.Kd;
+    }
+    else {
+		// Deal with texture
+		base = WHITE; // Default white
+    }
+    return computePhongLighting(
+        centroid,
+        normal,
+        triangle.material.Kd
+    );
+}
+
+std::array<Colour, 3> Rasteriser::computeGouraudShading(
+    const ModelTriangle& triangle,
+    const glm::vec3& cameraPos,
+    const std::vector<PointLight>& lights
+) {
+    std::array<Colour, 3> vertexColours;
+    for (int i = 0; i < 3; i++) {
+        glm::vec3 vertexPos = triangle.vertices[i];
+        glm::vec3 normal = glm::normalize(triangle.vertexNormals[i]);
+
+        vertexColours[i] = computePhongLighting(
+            vertexPos,
+            normal,
+            triangle.material.Kd
+        );
+    }
+    return vertexColours;
+}
+
+void Rasteriser::drawGouraudTriangle(
+    DrawingWindow& window,
+    const ModelTriangle& triangle,
+    const std::array<Colour, 3>& vertexColours
+) {
+    auto vertices = triangle.vertices;
+    int minX = std::floor(std::min({ vertices[0].x, vertices[1].x, vertices[2].x }));
+    int maxX = std::ceil(std::max({ vertices[0].x, vertices[1].x, vertices[2].x }));
+    int minY = std::floor(std::min({ vertices[0].y, vertices[1].y, vertices[2].y }));
+    int maxY = std::ceil(std::max({ vertices[0].y, vertices[1].y, vertices[2].y }));
+
+    double area = edgeFunction(vertices[0], vertices[1], vertices[2]);
+    if (abs(area) < 1e-6) return; // invalid
+
+    for (int y = minY; y < maxY; y++) {
+        if (y < 0 || y >= window.height) continue;
+
+        for (int x = minX; x < maxX; x++) {
+            if (x < 0 || x >= window.width) continue;
+
+            glm::vec2 p = glm::vec2(x + 0.5f, y + 0.5f);
+            float w0 = edgeFunction(vertices[1], vertices[2], p);
+            float w1 = edgeFunction(vertices[2], vertices[0], p);
+            float w2 = edgeFunction(vertices[0], vertices[1], p);
+
+            if (area < 0) {
+                w0 = -w0; w1 = -w1; w2 = -w2;
+            }
+
+            if (w0 >= 0 && w1 >= 0 && w2 >= 0) {
+                float alpha = w0 / area;
+                float beta = w1 / area;
+                float gamma = w2 / area;
+
+                float inverseW = alpha * triangle.inverseW[0] +
+                    beta * triangle.inverseW[1] +
+                    gamma * triangle.inverseW[2];
+
+                float z = alpha * vertices[0].z +
+                    beta * vertices[1].z +
+                    gamma * vertices[2].z;
+
+                float zNdc = z / inverseW;
+                int zBufferIndex = y * window.width + x;
+
+                // Colour interpolation
+                if (zNdc < zbuffer[zBufferIndex]) {
+                    zbuffer[zBufferIndex] = zNdc;
+                    int r = int(alpha * vertexColours[0].red +
+                        beta * vertexColours[1].red +
+                        gamma * vertexColours[2].red);
+                    int g = int(alpha * vertexColours[0].green +
+                        beta * vertexColours[1].green +
+                        gamma * vertexColours[2].green);
+                    int b = int(alpha * vertexColours[0].blue +
+                        beta * vertexColours[1].blue +
+                        gamma * vertexColours[2].blue);
+
+                    uint32_t colourInt = (255 << 24) + (r << 16) + (g << 8) + b;
+                    window.setPixelColour(x, y, colourInt);
+                }
+            }
+        }
+    }
+}
+
+void Rasteriser::drawPhongTriangle(
+    DrawingWindow& window,
+    const ModelTriangle& projectT,
+    const ModelTriangle& worldT,
+    const glm::vec3& cameraPos,
+    const std::vector<PointLight>& lights
+) {
+    auto vertices = projectT.vertices;
+    int minX = std::floor(std::min({ vertices[0].x, vertices[1].x, vertices[2].x }));
+    int maxX = std::ceil(std::max({ vertices[0].x, vertices[1].x, vertices[2].x }));
+    int minY = std::floor(std::min({ vertices[0].y, vertices[1].y, vertices[2].y }));
+    int maxY = std::ceil(std::max({ vertices[0].y, vertices[1].y, vertices[2].y }));
+
+    double area = edgeFunction(vertices[0], vertices[1], vertices[2]);
+    if (abs(area) < 1e-6) return; // invalid triangle
+
+    for (int y = minY; y < maxY; y++) {
+        if (y < 0 || y >= window.height) continue;
+
+        for (int x = minX; x < maxX; x++) {
+            if (x < 0 || x >= window.width) continue;
+
+            glm::vec2 p = glm::vec2(x + 0.5f, y + 0.5f);
+            float w0 = edgeFunction(vertices[1], vertices[2], p);
+            float w1 = edgeFunction(vertices[2], vertices[0], p);
+            float w2 = edgeFunction(vertices[0], vertices[1], p);
+
+            if (area < 0) { w0 = -w0; w1 = -w1; w2 = -w2; }
+
+            if (w0 >= 0 && w1 >= 0 && w2 >= 0) {
+                float alpha = w0 / area;
+                float beta = w1 / area;
+                float gamma = w2 / area;
+                // Projection correctness
+                float invW = alpha * projectT.inverseW[0] +
+                      beta * projectT.inverseW[1] +
+                      gamma * projectT.inverseW[2];
+                float z = alpha * vertices[0].z +
+                    beta * vertices[1].z +
+                    gamma * vertices[2].z;
+                float zNdc = z / invW;
+                int zIndex = y * window.width + x;
+
+                if (zNdc < zbuffer[zIndex]) {
+                    zbuffer[zIndex] = zNdc;
+
+                    // Normals interpolation
+                    glm::vec3 n0 = glm::normalize(worldT.vertexNormals[0]);
+                    glm::vec3 n1 = glm::normalize(worldT.vertexNormals[1]);
+                    glm::vec3 n2 = glm::normalize(worldT.vertexNormals[2]);
+                    glm::vec3 interpNormal = glm::normalize(
+                        alpha * n0 + beta * n1 + gamma * n2
+                    );
+                    // World Coordinate interpolation
+                    glm::vec3 v0 = worldT.vertices[0];
+                    glm::vec3 v1 = worldT.vertices[1];
+                    glm::vec3 v2 = worldT.vertices[2];
+                    glm::vec3 interpPos =
+                        alpha * v0 + beta * v1 + gamma * v2;
+
+                    // Compute Colour
+                    Colour pixelColour = computePhongLighting(interpPos, interpNormal, worldT.material.Kd);
+
+                    uint32_t colourInt =
+                        (255 << 24) + (pixelColour.red << 16) +
+                        (pixelColour.green << 8) + pixelColour.blue;
+
+                    window.setPixelColour(x, y, colourInt);
+                }
+            }
+        }
+    }
+}
+
+void Rasteriser::drawFilledTriangle(DrawingWindow& window, ModelTriangle triangle, Colour colour) {
     // Find bounding box
     auto vertices = triangle.vertices;
     int minX = std::floor(std::min({ vertices[0].x, vertices[1].x, vertices[2].x }));
@@ -165,7 +387,7 @@ void Rasteriser::drawTextureTriangle(DrawingWindow& window, ModelTriangle t, Buf
         std::cerr << "Texture not found: " << mapName << std::endl;
         return;
     }
-
+ 
     for (int y = minY; y < maxY; y++) {
         if (y < 0 || y >= window.height) continue; // out of boundary
         for (int x = minX; x < maxX; x++) {
@@ -226,14 +448,64 @@ void Rasteriser::drawTextureTriangle(DrawingWindow& window, ModelTriangle t, Buf
     }
 }
 
-void Rasteriser::drawAllTriangles(DrawingWindow& window, Buffers &buffers, const std::vector<ModelTriangle>& triangles) {
-    for (auto t : triangles) {
-        if (t.material.type == "kd") { drawFilledTriangle(window, t); }
-		else if (t.material.type == "kd_map") { drawTextureTriangle(window, t, buffers); }
+void Rasteriser::drawAllTriangles(
+    DrawingWindow& window,
+    Buffers& buffers,
+    const std::vector<ModelTriangle>& projectedTriangles,
+    const std::vector<ModelTriangle>& worldTriangles,
+    ShadeMode shadeMode,
+    bool lighting
+) {
+    for (size_t i = 0; i < projectedTriangles.size(); i++) {
+        const ModelTriangle& projectedT = projectedTriangles[i];
+        const ModelTriangle& worldT = worldTriangles[i];
+        // Material KD COLOUR
+        if (worldT.material.type == "kd") { 
+            Colour colour;
+            // without Light
+            if (!lighting) {
+                drawFilledTriangle(window, projectedT, worldT.material.Kd);
+                continue;
+            }
+            // with light
+            switch (shadeMode) {
+                case ShadeMode::Flat: {
+                    colour = computeFlatShading(worldT, camera, lights);
+                    drawFilledTriangle(window, projectedT, colour);
+                    break;
+                }
+                case ShadeMode::Gouraud: {
+                    std::array<Colour, 3> vertexColours = computeGouraudShading(worldT, camera, lights);
+                    drawGouraudTriangle(window, projectedT, vertexColours);
+                    break;
+                }
+                case ShadeMode::Phong: {
+                    // Phong shading
+                    drawPhongTriangle(window, projectedT, worldT, camera, lights);
+                    break;
+                }
+                case ShadeMode::Wireframe: {
+                    drawWireframeTriangle(window, projectedT, WHITE);
+                    break;
+                }
+            }            
+        }
+        // Material KD MAP temp no lighting
+		else if (worldT.material.type == "kd_map") { 
+            drawTextureTriangle(window, projectedT, buffers); 
+        }
+		else { 
+            drawWireframeTriangle(window, projectedT, WHITE); 
+        }
     }
 }
 
-// constructor
+void Rasteriser::updateLights(std::vector<PointLight>& inLights) {
+	lights = inLights;
+}
+
+
+
 Rasteriser::Rasteriser(int w, int h)
     : width(w),
     height(h),

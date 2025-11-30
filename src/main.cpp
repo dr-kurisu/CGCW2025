@@ -4,7 +4,6 @@
 #include "Utils.h"
 #include "Rasteriser.h"
 #include "RayTracer.h"
-#include "Renderer.h"
 #include "FileLoader.h"
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -15,8 +14,8 @@ using namespace std;
 
 // Key Parameters
 bool video = false;
-const string renderMode = "RayTracer";
-// const string renderMode = "Rasteriser";
+// const string renderMode = "RayTracer";
+const string renderMode = "Rasteriser";
 
 SDL_Event event;
 DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
@@ -44,26 +43,38 @@ vector<ModelTriangle> cornell;
 vector<ModelTriangle> transformedCornell;
 vector<ModelTriangle> projectedcornell;
 
+Buffers sphereBuffers;
+vector<ModelTriangle> sphere;
+vector<ModelTriangle> transformedSphere;
+vector<ModelTriangle> projectedSphere;
+
 mat4 logoModelMat = mat4(1.0f); // Model Matrix for logo
 mat4 cornellModelMat = mat4(1.0f); // Model Matrix for cornell
+mat4 sphereModelMat = mat4(10.f); // Model Matrix for sphere
+
+vector<PointLight> lights = {
+	PointLight(glm::vec3(0.0f, 100.0f, 60.0f), glm::vec3(1.0, 1.0, 1.0), 2000.0f, "TopLight"),
+	// PointLight(glm::vec3(0.0f, 50.0f, 300.0f), glm::vec3(1.0, 1.0, 1.0), 2000.0f, "FrontLight"),
+};
 
 // Define Rasteriser and RayTracer
-Renderer* renderer;
-
 int frameID = 0;
+Rasteriser* rasteriser;
+RayTracer* rayTracer;
 
 void loadCornell() {
 	cornellModelMat = glm::translate(cornellModelMat, vec3(0.0f, 0.0f, -300.0f));
 	cornellBuffers = readOBJFile("./models/cornell-box.obj", 50.0f);
 	printBuffers(cornellBuffers);
 	cornell = convertToTriangles(cornellBuffers); // world coords
+	computeNormals(cornellBuffers, cornell);
 	transformedCornell = Transform::transformTriangles(cornell, cornellModelMat);
 	projectedcornell = Transform::projectTriangles(transformedCornell, viewMat, projMat);  // screen coords
 	if (renderMode == "Rasteriser") {
-		renderer->drawAllTriangles(window, cornellBuffers, projectedcornell);
+		rasteriser->drawAllTriangles(window, cornellBuffers, projectedcornell, cornell, ShadeMode::Flat, false);
 	}
 	else {
-		renderer->drawAllTriangles(window, cornellBuffers, cornell);
+		rayTracer->drawAllTriangles(window, cornellBuffers, cornell, camera);
 	}
 }
 
@@ -72,31 +83,54 @@ void loadLogo() {
 	logoBuffers = readOBJFile("./models/logo.obj", 0.5f);
 	printBuffers(logoBuffers);
 	logo = convertToTriangles(logoBuffers); // world coords
+	computeNormals(logoBuffers, logo);
 	transformedLogo = Transform::transformTriangles(logo, logoModelMat);
 	projectedLogo = Transform::projectTriangles(transformedLogo, viewMat, projMat);  // screen coords
 	if (renderMode == "Rasteriser") {
-		renderer->drawAllTriangles(window, logoBuffers, projectedLogo);
+		rasteriser->drawAllTriangles(window, logoBuffers, projectedLogo, logo, ShadeMode::Flat, true);
 	}
 	else {
-		renderer->drawAllTriangles(window, logoBuffers, logo);
+		rayTracer->drawAllTriangles(window, logoBuffers, logo, camera);
+	}
+}
+
+void loadSphere() {
+	sphereModelMat = glm::translate(sphereModelMat, vec3(-60.0f, -150.0f, -280.0f));
+	sphereBuffers = readOBJFile("./models/sphere.obj", 30.0f);
+	printBuffers(sphereBuffers);
+	sphere = convertToTriangles(sphereBuffers); // world coords
+	computeNormals(sphereBuffers, sphere);
+	transformedSphere = Transform::transformTriangles(sphere, sphereModelMat);
+	projectedSphere = Transform::projectTriangles(transformedSphere, viewMat, projMat);  // screen coords
+	if (renderMode == "Rasteriser") {
+		rasteriser->drawAllTriangles(window, sphereBuffers, projectedSphere, sphere, ShadeMode::Phong, true);
+	}
+	else {
+		rayTracer->drawAllTriangles(window, sphereBuffers, sphere, camera);
 	}
 }
 
 void update() {
 	window.clearPixels();
-	renderer->resetZBuffer();
-	renderer->updateMatrices(viewMat, projMat);
-	glm::mat4 viewMat = glm::lookAt(camera, center, cameraUp);
-	projectedLogo = Transform::projectTriangles(transformedLogo, viewMat, projMat);
-	projectedcornell = Transform::projectTriangles(transformedCornell, viewMat, projMat);
 	if (renderMode == "Rasteriser") {
-		renderer->drawAllTriangles(window, cornellBuffers, projectedcornell);
-		//renderer->drawAllTriangles(window, logoBuffers, projectedLogo);
-		return;
+		rasteriser->resetZBuffer();
 	}
 	else {
-		renderer->drawAllTriangles(window, cornellBuffers, cornell);
-		//renderer->drawAllTriangles(window, logoBuffers, logo);
+		rayTracer->updateMatrices(viewMat, projMat);
+		rayTracer->resetZBuffer();
+	}
+	viewMat = glm::lookAt(camera, center, cameraUp);
+	projectedLogo = Transform::projectTriangles(transformedLogo, viewMat, projMat);
+	projectedcornell = Transform::projectTriangles(transformedCornell, viewMat, projMat);
+	projectedSphere = Transform::projectTriangles(transformedSphere, viewMat, projMat);
+	if (renderMode == "Rasteriser") {
+		rasteriser->updateCamera(camera);
+		rasteriser->drawAllTriangles(window, cornellBuffers, projectedcornell, cornell, ShadeMode::Flat, false);
+		rasteriser->drawAllTriangles(window, sphereBuffers, projectedSphere, sphere, ShadeMode::Phong, true);
+	}
+	else {
+		rayTracer->drawAllTriangles(window, cornellBuffers, cornell, camera);
+		rayTracer->drawAllTriangles(window, sphereBuffers, sphere, camera);
 	}
 }
 
@@ -157,20 +191,17 @@ void handleEvent(SDL_Event event, DrawingWindow& window) {
 
 
 void init() {
-	if (renderMode == "RayTracer") {
-		renderer = new RayTracer(WIDTH, HEIGHT);
-	}
-	else if (renderMode == "Rasteriser") {
-		renderer = new Rasteriser(WIDTH, HEIGHT);
-	}
-	else {
-		cerr << "Invalid render mode" << endl;
-		exit(1);
-	}
 	// Load View and Projection Matrices
-	renderer->updateMatrices(viewMat, projMat);
-	renderer->resetZBuffer();
+	rasteriser = new Rasteriser(window.width, window.height);
+	rayTracer = new RayTracer(window.width, window.height);
+	rayTracer->updateMatrices(viewMat, projMat);
+	rasteriser->resetZBuffer();
+	rayTracer->resetZBuffer();
+	rasteriser->updateCamera(camera);
+	rasteriser->updateLights(lights);
+
 	loadCornell();
+	loadSphere();
 	//loadLogo();
 	std::cout << "Initialisation complete." << std::endl;
 }

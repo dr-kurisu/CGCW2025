@@ -74,16 +74,35 @@ mat3 Transform::rotate(const float degrees, const vec3& axis) {
     R = mat3(1.0) + sin(radians) * K + (1 - cos(radians)) * K * K;
     return R;
 }
-
+// orbit
 void Transform::left(float degrees, vec3& camera, vec3& up) {
     mat3 R = rotate(-degrees, glm::normalize(up));
     camera = R * camera;
 }
-
+// orbit
 void Transform::up(float degrees, vec3& camera, vec3& up) {
     mat3 R = rotate(-degrees, glm::normalize(glm::cross(camera, up)));
     camera = R * camera;
     up = R * up;
+}
+
+// direct rotate left-right
+void Transform::yaw(float degrees, glm::vec3& camera, glm::vec3& center, glm::vec3& up) {
+    glm::mat3 R = Transform::rotate(5.0f, glm::vec3(0, 1, 0));
+    glm::vec3 forward = center - camera;
+    forward = R * forward;
+    center = camera + forward;
+
+}
+
+// direct rotate up-down
+void Transform::pitch(float degrees, glm::vec3& camera, glm::vec3& center, glm::vec3& up) {
+    glm::vec3 right = glm::normalize(glm::cross(center - camera, up));
+    glm::mat3 R = Transform::rotate(-5.0f, right);
+    glm::vec3 forward = center - camera;
+    forward = R * forward;
+    center = camera + forward;
+    up = glm::normalize(R * up);
 }
 
 // Dolly

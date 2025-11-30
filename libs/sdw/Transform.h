@@ -23,6 +23,8 @@ public:
 	static mat3 rotate(const float degrees, const vec3& axis);
 	static void left(float degrees, vec3& camera, vec3& up);
 	static void up(float degrees, vec3& camera, vec3& up);
+	static void yaw(float degrees, vec3& camera, vec3& center, vec3& up);
+	static void pitch(float degrees, vec3& camera, vec3& center, vec3& up);
 	static void moveForward(float distance, vec3& camera, vec3& center, vec3& up);
 	static void moveRight(float distance, vec3& camera, vec3& center, vec3& up);
 	static void moveUp(float distance, vec3& camera, vec3& center, vec3& up);

@@ -11,6 +11,8 @@
 
 struct ModelTriangle {
 	std::array<glm::vec3, 3> vertices{};
+	std::array<glm::vec3, 3> vertexNormals{};  // normals for each vertex
+	std::array<int, 3> vertexIndices{};  // vertex index used in normals
 	glm::vec3 u{};
 	glm::vec3 v{};
 	glm::vec3 inverseW = {1.0f, 1.0f, 1.0f};

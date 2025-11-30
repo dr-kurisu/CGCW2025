@@ -22,9 +22,7 @@ struct Buffers {
 	std::vector<glm::vec2> textureCoords;
 	std::vector<int> indices;
 	std::vector<int> textureIndices;
-	
-	glm::mat4 viewMat = glm::mat4(1.0f);
-	glm::mat4 projMat = glm::mat4(1.0f);
+	std::vector<glm::vec3> vertexNormals;
 };
 
 Buffers readOBJFile(const std::string &filePath, float factor);
@@ -32,4 +30,6 @@ Buffers readOBJFile(const std::string &filePath, float factor);
 std::vector<ModelTriangle> convertToTriangles(const Buffers& buffers);
 
 void printBuffers(const Buffers &buffers);
+
+void computeNormals(Buffers& buffers, std::vector<ModelTriangle>& triangles);
 #endif

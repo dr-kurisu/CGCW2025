@@ -23,7 +23,7 @@ struct ModelTriangle {
 	ModelTriangle(const glm::vec3 &v0, const glm::vec3 &v1, const glm::vec3 &v2);
 	friend std::ostream &operator<<(std::ostream &os, const ModelTriangle &triangle);
 
-	// Has material with texture map
+	// texture check
 	bool hasTexture() const { return !material.mapName.empty(); }
 };
 

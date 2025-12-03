@@ -9,61 +9,6 @@
 #define HEIGHT 480
 #endif
 
-ModelTriangle Transform::transformTriangle(ModelTriangle& triangle, glm::mat4& mat) {
-	ModelTriangle transformedTriangle = triangle;
-    for (int i = 0; i < 3; i++) {
-        glm::vec4 homogenousCoord = glm::vec4(triangle.vertices[i], 1.0f);
-        glm::vec4 transformedCoord = mat * homogenousCoord;
-        transformedTriangle.vertices[i] = glm::vec3(transformedCoord) / transformedCoord.w;
-    }
-	return transformedTriangle;
-}
-
-std::vector<ModelTriangle> Transform::transformTriangles(std::vector<ModelTriangle> triangles, glm::mat4& mat) {
-    std::vector<ModelTriangle> transformedTriangles;
-    for (ModelTriangle t : triangles) {
-        transformedTriangles.push_back(Transform::transformTriangle(t, mat));
-    }
-    return transformedTriangles;
-}
-
-std::vector<ModelTriangle> Transform::projectTriangles(std::vector<ModelTriangle> &triangles, mat4& viewMat, mat4& projMat) {
-    std::vector<ModelTriangle> projectedTriangles;
-    // UV unchange
-    for (ModelTriangle t : triangles) {
-        bool flag = false;
-        // Deep Copy not pointer copy
-        for (int i = 0; i < 3; i++) {
-            glm::vec3 worldCoord = t.vertices[i];
-            // Tranformation to clip space
-            vec4 viewPos = viewMat * vec4(worldCoord, 1.0f);
-            vec4 clipSpacePos = projMat * viewPos;
-            // behind the camera (remove entire triangle)
-            if (clipSpacePos.w <= 1e-6) {
-                flag = true; 
-                break;
-            }
-			// perspective divide for texture coordinates
-			double inverseW = 1.0f / clipSpacePos.w;
-            // NDC
-            vec3 ndc = glm::vec3(clipSpacePos) * (float)inverseW;
-            // store 1/w for perspective correction
-			t.inverseW[i] = inverseW;
-            // May outside depth range
-            if (ndc.z < -1.0f || ndc.z > 1.0f) {
-                flag = true;
-                break;
-			}
-            // Screen space
-			float sx = (ndc.x + 1) * 0.5f * WIDTH; // (-1 to 1) to (0 to WIDTH)
-			float sy = (1 - ndc.y) * 0.5f * HEIGHT;// (-1 to 1) to (0 to HEIGHT)
-            t.vertices[i] = glm::vec3(sx, sy, ndc.z);
-        }
-        if (!flag) projectedTriangles.push_back(t);
-    }
-    return projectedTriangles;
-}
-
 mat3 Transform::rotate(const float degrees, const vec3& axis) {
     mat3 R; // rotation matrix
     mat3 K; // cross product matrix
@@ -75,59 +20,90 @@ mat3 Transform::rotate(const float degrees, const vec3& axis) {
     return R;
 }
 // orbit
-void Transform::left(float degrees, vec3& camera, vec3& up) {
-    mat3 R = rotate(-degrees, glm::normalize(up));
-    camera = R * camera;
+void Transform::left(float degrees) {
+    vec3 offset = camera - center;
+    offset = rotate(degrees, cameraUp) * offset;
+    camera = center + offset;
+    updateBasis();
 }
 // orbit
-void Transform::up(float degrees, vec3& camera, vec3& up) {
-    mat3 R = rotate(-degrees, glm::normalize(glm::cross(camera, up)));
-    camera = R * camera;
-    up = R * up;
+void Transform::up(float degrees) {
+    vec3 axis = glm::normalize(glm::cross(cameraForward, cameraUp));
+    vec3 offset = camera - center;
+    offset = rotate(-degrees, axis) * offset;
+    camera = center + offset;
+    cameraUp = rotate(-degrees, axis) * cameraUp;
+    updateBasis();
 }
 
 // direct rotate left-right
-void Transform::yaw(float degrees, glm::vec3& camera, glm::vec3& center, glm::vec3& up) {
-    glm::mat3 R = Transform::rotate(5.0f, glm::vec3(0, 1, 0));
-    glm::vec3 forward = center - camera;
-    forward = R * forward;
-    center = camera + forward;
-
+void Transform::yaw(float degrees) {
+    mat3 R = rotate(degrees, cameraUp);
+    cameraForward = glm::normalize(R * cameraForward);
+    cameraRight = glm::normalize(glm::cross(cameraForward, cameraUp));
+    cameraUp = glm::normalize(glm::cross(cameraRight, cameraForward));
+    center = camera + cameraForward;
+    updateBasis();
 }
 
 // direct rotate up-down
-void Transform::pitch(float degrees, glm::vec3& camera, glm::vec3& center, glm::vec3& up) {
-    glm::vec3 right = glm::normalize(glm::cross(center - camera, up));
-    glm::mat3 R = Transform::rotate(-5.0f, right);
-    glm::vec3 forward = center - camera;
-    forward = R * forward;
-    center = camera + forward;
-    up = glm::normalize(R * up);
+void Transform::pitch(float degrees) {
+    mat3 R = rotate(degrees, cameraRight);
+    cameraForward = glm::normalize(R * cameraForward);
+    cameraUp = glm::normalize(glm::cross(cameraRight, cameraForward));
+    cameraRight = glm::normalize(glm::cross(cameraForward, cameraUp));
+    center = camera + cameraForward;
+    updateBasis();
 }
 
 // Dolly
-void Transform::moveForward(float distance, vec3& camera, vec3& center, vec3& up) {
-	vec3 forward = glm::normalize(center - camera);
-	camera += forward * distance;
-	center += forward * distance;
+void Transform::moveForward(float distance) {
+    camera += cameraForward * distance;
+    center += cameraForward * distance;
 }
-
 // Pedestal
-void Transform::moveUp(float distance, vec3& camera, vec3& center, vec3& up) {
-	vec3 u = glm::normalize(up);
-	camera += u * distance;
-	center += u * distance;
+void Transform::moveUp(float distance) {
+    camera += cameraUp * distance;
+    center += cameraUp * distance;
 }
-
 // Truck
-void Transform::moveRight(float distance, vec3& camera, vec3& center, vec3& up) {
-	vec3 right = glm::normalize(glm::cross(center - camera, up));
-	camera += right * distance;
-	center += right * distance;
+void Transform::moveRight(float distance) {
+    camera += cameraRight * distance;
+    center += cameraRight * distance;
 }
 
-Transform::Transform() {
+// Rolling
+void Transform::roll(float degrees) {
+    mat3 R = rotate(degrees, cameraForward);
+    cameraUp = glm::normalize(R * cameraUp);
+    cameraRight = glm::normalize(glm::cross(cameraForward, cameraUp));
+    cameraUp = glm::normalize(glm::cross(cameraRight, cameraForward));
+    center = camera + cameraForward;
 }
 
-Transform::~Transform() {
+// Update
+void Transform::updateBasis() {
+    cameraForward = glm::normalize(center - camera);
+    cameraRight = glm::normalize(glm::cross(cameraForward, cameraUp));
+    cameraUp = glm::normalize(glm::cross(cameraRight, cameraForward));
 }
+
+Transform::Transform(
+    glm::vec3& cameraIn,
+    glm::vec3& centerIn,
+    glm::vec3& cameraUpIn,
+    glm::vec3& cameraRightIn,
+    glm::vec3& cameraForwardIn
+)
+    : camera(cameraIn),
+    center(centerIn),
+    cameraUp(cameraUpIn),
+    cameraRight(cameraRightIn),
+    cameraForward(cameraForwardIn)
+{
+    cameraForward = glm::normalize(center - camera);
+    cameraRight = glm::normalize(glm::cross(cameraForward, cameraUp));
+    cameraUp = glm::normalize(glm::cross(cameraRight, cameraForward));
+}
+
+Transform::~Transform() = default;

@@ -46,6 +46,38 @@ void readMTLFile(Buffers &buffers, const std::string& filePath) {
 				static_cast<int>(b * 255)
 			);
 		}
+		// Add new Keyword reflect
+		else if (prefix == "reflect" && currentMaterial) {
+			float strength;
+			int r, g, b;
+			lineStream >> strength >> r >> g >> b;
+			currentMaterial->type = "reflect";
+			currentMaterial->reflectStrength = strength;
+			currentMaterial->Kd = Colour(r, g, b);
+		}
+		// Add new Keyword metallic
+		else if (prefix == "metallic" && currentMaterial) {
+			// order: metallicFactor reflectStrength r g b
+			float metallicFactor, reflectStrength;
+			int r, g, b;
+			lineStream >> metallicFactor >> reflectStrength >> r >> g >> b;
+			currentMaterial->type = "metallic";
+			currentMaterial->Kd = Colour(200, 200, 200); // default grey
+			currentMaterial->metallic = metallicFactor;
+			currentMaterial->reflectStrength = reflectStrength;
+			currentMaterial->metalColour = Colour(r, g, b);
+		}
+		else if (prefix == "refract" && currentMaterial) {
+			float refractFactor, transparency;
+			lineStream >> refractFactor >> transparency;
+			currentMaterial->refractFactor = refractFactor;
+			currentMaterial->Kd = Colour(150, 150, 255); // default light blue
+			currentMaterial->type = "glass";
+			currentMaterial->transparency = transparency;
+		}
+		else {
+			std::cout << "Unknown MTL line: " << line << std::endl;
+		}
 	}
 	buffers.materials = materials;
 }

@@ -77,9 +77,11 @@ Colour Rasteriser::computePhongLighting(
     const glm::vec3& normal,
     const Colour& colour
 ) {
+    // No shadow
     glm::vec3 base = glm::vec3(colour.red, colour.green, colour.blue) / 255.0f;
-    glm::vec3 ambient = glm::vec3(0.1f) * base;
-    glm::vec3 total = ambient;
+    glm::vec3 ambientv3 = glm::vec3(ambient) * base;
+    glm::vec3 total = ambientv3;
+    const float EPSILON = 1e-6f;
 
     for (const auto& light : lights) {
         glm::vec3 lightDir = glm::normalize(light.position - pos);
@@ -90,11 +92,10 @@ Colour Rasteriser::computePhongLighting(
         float diff = std::max(0.0f, glm::dot(normal, lightDir));
 
         // Specular
-        float shininess = 64.0f;
-        float specStrength = 0.3f;
         float spec = pow(std::max(0.0f, glm::dot(normal, halfDir)), shininess);
 
         float d = glm::length(light.position - pos);
+		if (d < EPSILON) d = EPSILON;
         float attenuation = 250.0f / (4 * M_PI * d * d);
 
         glm::vec3 lightCol = light.colour * light.intensity * attenuation;
@@ -166,7 +167,7 @@ void Rasteriser::drawGouraudTriangle(
     int minY = std::floor(std::min({ vertices[0].y, vertices[1].y, vertices[2].y }));
     int maxY = std::ceil(std::max({ vertices[0].y, vertices[1].y, vertices[2].y }));
 
-    double area = edgeFunction(vertices[0], vertices[1], vertices[2]);
+    float area = edgeFunction(vertices[0], vertices[1], vertices[2]);
     if (abs(area) < 1e-6) return; // invalid
 
     for (int y = minY; y < maxY; y++) {
@@ -459,11 +460,17 @@ void Rasteriser::drawAllTriangles(
     for (size_t i = 0; i < projectedTriangles.size(); i++) {
         const ModelTriangle& projectedT = projectedTriangles[i];
         const ModelTriangle& worldT = worldTriangles[i];
+		// Animation Wireframe mode
+        if (useWireframe) {
+            drawWireframeTriangle(window, projectedT, WHITE);
+            continue;
+		}
+
         // Material KD COLOUR
-        if (worldT.material.type == "kd") { 
+        if (worldT.material.type == "kd" || worldT.material.type == "reflect" || worldT.material.type == "metallic" || worldT.material.type == "glass") {
             Colour colour;
             // without Light
-            if (!lighting) {
+            if (!lighting || useLighting) {
                 drawFilledTriangle(window, projectedT, worldT.material.Kd);
                 continue;
             }
@@ -490,8 +497,8 @@ void Rasteriser::drawAllTriangles(
                 }
             }            
         }
-        // Material KD MAP temp no lighting
-		else if (worldT.material.type == "kd_map") { 
+		// Material KD MAP temp no lighting
+		else if (useTextures && worldT.material.type == "kd_map") {
             drawTextureTriangle(window, projectedT, buffers); 
         }
 		else { 
@@ -503,7 +510,6 @@ void Rasteriser::drawAllTriangles(
 void Rasteriser::updateLights(std::vector<PointLight>& inLights) {
 	lights = inLights;
 }
-
 
 
 Rasteriser::Rasteriser(int w, int h)

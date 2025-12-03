@@ -12,25 +12,29 @@ typedef glm::mat4 mat4;
 typedef glm::vec3 vec3;
 typedef glm::vec4 vec4;
 
-struct ModelTriangle; // Forward declaration
-
 class Transform
 {
 public:
-	Transform();
-	virtual ~Transform();
+	glm::vec3& camera;
+	glm::vec3& center;
+	glm::vec3& cameraUp;
+	glm::vec3& cameraRight;
+	glm::vec3& cameraForward;
+
+public:
+	Transform(vec3& cameraIn, vec3& centerIn, vec3& cameraUpIn, vec3& cameraRightIn, vec3& cameraForwardIn);
+	~Transform();
 
 	static mat3 rotate(const float degrees, const vec3& axis);
-	static void left(float degrees, vec3& camera, vec3& up);
-	static void up(float degrees, vec3& camera, vec3& up);
-	static void yaw(float degrees, vec3& camera, vec3& center, vec3& up);
-	static void pitch(float degrees, vec3& camera, vec3& center, vec3& up);
-	static void moveForward(float distance, vec3& camera, vec3& center, vec3& up);
-	static void moveRight(float distance, vec3& camera, vec3& center, vec3& up);
-	static void moveUp(float distance, vec3& camera, vec3& center, vec3& up);
-	static ModelTriangle transformTriangle(ModelTriangle& triangle, mat4& mat);
-	static std::vector<ModelTriangle> Transform::transformTriangles(std::vector<ModelTriangle> triangles, glm::mat4& mat);
-	static std::vector<ModelTriangle> projectTriangles(std::vector<ModelTriangle>& triangles, glm::mat4& viewMat, glm::mat4& projMat);
+	void left(float degrees);
+	void up(float degrees);
+	void yaw(float degrees);
+	void pitch(float degrees);
+	void roll(float degrees);
+	void moveForward(float distance);
+	void moveRight(float distance);
+	void moveUp(float distance);
+	void updateBasis();
 };
 
 #endif

@@ -4,8 +4,8 @@
 #include <iostream>
 #include <fstream>
 #include <stdexcept>
-#include "Utils.h"
 #include <cstdint>
+#include <vector>
 
 class TextureMap {
 public:

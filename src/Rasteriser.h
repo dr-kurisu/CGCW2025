@@ -14,6 +14,10 @@ public:
 	Rasteriser(int w, int h);
 	~Rasteriser();
 
+	bool useWireframe = true;
+	bool useTextures = false;
+	bool useLighting = false;
+
 	Colour computePhongLighting(
 		const glm::vec3& pos,
 		const glm::vec3& normal,
@@ -24,7 +28,7 @@ public:
 
 	void drawFilledTriangle(DrawingWindow& window, ModelTriangle triangle, Colour colour);
 
-	void drawTextureTriangle(DrawingWindow& window, ModelTriangle t, Buffers &buffers);
+	void drawTextureTriangle(DrawingWindow& window, ModelTriangle t, Buffers& buffers);
 
 	void drawPhongTriangle(
 		DrawingWindow& window,
@@ -76,5 +80,8 @@ private:
 	int width;
 	int height;
 	float ambient = 0.2f;
+	float shininess = 64.0f;
+	float specStrength = 1.0f;
+
 	std::string currentTextureName = "";
 };
